@@ -255,7 +255,21 @@ func TestManager_SetDatasetProperty(t *testing.T) {
 				property: "",
 				value:    "2G",
 			},
-			wantErr: "zfs; invalid property",
+			wantErr: "zfs; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "all",
+			args: args{
+				name:     "tank/my-dataset",
+				property: "all",
+				value:    "what",
+			},
+			wantErr: "zfs; invalid property: 'all' is not a valid property",
 			wantErrTargets: []error{
 				Err,
 				ErrZFS,
@@ -339,6 +353,191 @@ usage:
 				tt.args.property,
 				tt.args.value,
 			)
+
+			if tt.wantErr != "" {
+				assert.EqualError(t, err, tt.wantErr)
+				for _, target := range tt.wantErrTargets {
+					assert.ErrorIs(t, err, target)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestManager_SetDatasetProperties(t *testing.T) {
+	ioWriter := reflect.TypeOf((*io.Writer)(nil)).Elem()
+
+	type args struct {
+		name       string
+		properties map[string]string
+	}
+	tests := []struct {
+		name           string
+		args           args
+		wantArgs       []string
+		stderr         string
+		commandErr     error
+		wantErr        string
+		wantErrTargets []error
+	}{
+		{
+			name: "empty dataset name",
+			args: args{
+				name: "",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantErr: "zfs; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidName,
+			},
+		},
+		{
+			name: "slash prefix name",
+			args: args{
+				name: "/tank/my-dataset",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantErr: "zfs; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidName,
+			},
+		},
+		{
+			name: "slash suffix name",
+			args: args{
+				name: "tank/my-dataset/",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantErr: "zfs; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidName,
+			},
+		},
+		{
+			name: "empty property name",
+			args: args{
+				name: "tank/my-dataset",
+				properties: map[string]string{
+					"":      "what",
+					"quota": "10G",
+				},
+			},
+			wantErr: "zfs; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "all",
+			args: args{
+				name: "tank/my-dataset",
+				properties: map[string]string{
+					"all":   "what",
+					"quota": "10G",
+				},
+			},
+			wantErr: "zfs; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "single property",
+			args: args{
+				name: "tank/my-dataset",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantArgs: []string{"set", "quota=10G", "tank/my-dataset"},
+		},
+		{
+			name: "multiple properties",
+			args: args{
+				name: "tank/my-dataset",
+				properties: map[string]string{
+					"quota":                 "10G",
+					"feature@async_destroy": "disabled",
+				},
+			},
+			wantArgs: []string{
+				"set", "feature@async_destroy=disabled", "quota=10G",
+				"tank/my-dataset",
+			},
+		},
+		{
+			name: "command error",
+			args: args{
+				name: "tank/my-dataset",
+				properties: map[string]string{
+					"sync": "dontdoit",
+				},
+			},
+			wantArgs: []string{
+				"set", "sync=dontdoit", "tank/my-dataset",
+			},
+			//nolint:lll
+			stderr: `cannot set property for 'tank/my-dataset': 'sync' must be one of 'standard | always | disabled'
+usage:
+	set <property=value> ... <filesystem|volume|snapshot> ...
+`,
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; exit status 1: " +
+				"cannot set property for 'tank/my-dataset': " +
+				"'sync' must be one of 'standard | always | disabled'",
+			wantErrTargets: []error{Err, ErrZFS},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := gomockctx.New(context.Background())
+			ctrl := gomock.NewController(t)
+			r := mock_runner.NewMockRunner(ctrl)
+			if len(tt.wantArgs) > 0 {
+				r.EXPECT().RunContext(
+					gomockctx.Eq(ctx),
+					gomock.Nil(),
+					gomock.AssignableToTypeOf(ioWriter),
+					gomock.AssignableToTypeOf(ioWriter),
+					"zfs",
+					tt.wantArgs,
+				).DoAndReturn(func(
+					_ context.Context,
+					_ io.Reader,
+					_ io.Writer,
+					stderr io.Writer,
+					_ string,
+					_ ...string,
+				) error {
+					_, _ = stderr.Write([]byte(tt.stderr))
+
+					return tt.commandErr
+				})
+			}
+
+			m := &Manager{Runner: r}
+
+			err := m.SetDatasetProperties(ctx, tt.args.name, tt.args.properties)
 
 			if tt.wantErr != "" {
 				assert.EqualError(t, err, tt.wantErr)

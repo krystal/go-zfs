@@ -216,8 +216,8 @@ func TestManager_SetPoolProperty(t *testing.T) {
 			wantErr: "zpool; invalid name",
 			wantErrTargets: []error{
 				Err,
-				ErrInvalidName,
 				ErrZpool,
+				ErrInvalidName,
 			},
 		},
 		{
@@ -227,12 +227,25 @@ func TestManager_SetPoolProperty(t *testing.T) {
 				property: "",
 				value:    "2G",
 			},
-			wantErr: "zpool; invalid property",
+			wantErr: "zpool; invalid property: empty property name",
 			wantErrTargets: []error{
 				Err,
-				ErrInvalidProperty,
 				ErrZpool,
-				errInvalidPoolProperty,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "all",
+			args: args{
+				name:     "my-test-pool",
+				property: "all",
+				value:    "what",
+			},
+			wantErr: "zpool; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
 			},
 		},
 		{
@@ -324,6 +337,173 @@ usage:
 	}
 }
 
+func TestManager_SetPoolProperties(t *testing.T) {
+	ioWriter := reflect.TypeOf((*io.Writer)(nil)).Elem()
+
+	type args struct {
+		name       string
+		properties map[string]string
+	}
+	tests := []struct {
+		name           string
+		args           args
+		wantArgs       []string
+		stderr         string
+		commandErr     error
+		wantErr        string
+		wantErrTargets []error
+	}{
+		{
+			name: "empty dataset name",
+			args: args{
+				name: "",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantErr: "zpool; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidName,
+			},
+		},
+		{
+			name: "invalid pool name",
+			args: args{
+				name: "my-pool/things",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantErr: "zpool; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidName,
+			},
+		},
+		{
+			name: "empty property name",
+			args: args{
+				name: "my-test-pool",
+				properties: map[string]string{
+					"":      "what",
+					"quota": "10G",
+				},
+			},
+			wantErr: "zpool; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "all",
+			args: args{
+				name: "my-test-pool",
+				properties: map[string]string{
+					"all":   "what",
+					"quota": "10G",
+				},
+			},
+			wantErr: "zpool; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "single property",
+			args: args{
+				name: "my-test-pool",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantArgs: []string{"set", "quota=10G", "my-test-pool"},
+		},
+		{
+			name: "multiple properties",
+			args: args{
+				name: "my-test-pool",
+				properties: map[string]string{
+					"quota":                 "10G",
+					"feature@async_destroy": "disabled",
+				},
+			},
+			wantArgs: []string{
+				"set", "feature@async_destroy=disabled", "quota=10G",
+				"my-test-pool",
+			},
+		},
+		{
+			name: "command error",
+			args: args{
+				name: "my-test-pool",
+				properties: map[string]string{
+					"listsnapshots": "whatnow",
+				},
+			},
+			wantArgs: []string{"set", "listsnapshots=whatnow", "my-test-pool"},
+			//nolint:lll
+			stderr: `cannot set property for 'zfs-local-test': 'listsnapshots' must be one of 'on | off'
+usage:
+	set <property=value> <pool>
+`,
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; exit status 1: cannot set property for " +
+				"'zfs-local-test': 'listsnapshots' must be one of 'on | off'",
+			wantErrTargets: []error{Err, ErrZpool},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := gomockctx.New(context.Background())
+			ctrl := gomock.NewController(t)
+			r := mock_runner.NewMockRunner(ctrl)
+			if len(tt.wantArgs) > 0 {
+				r.EXPECT().RunContext(
+					gomockctx.Eq(ctx),
+					gomock.Nil(),
+					gomock.AssignableToTypeOf(ioWriter),
+					gomock.AssignableToTypeOf(ioWriter),
+					"zpool",
+					tt.wantArgs,
+				).DoAndReturn(func(
+					_ context.Context,
+					_ io.Reader,
+					_ io.Writer,
+					stderr io.Writer,
+					_ string,
+					_ ...string,
+				) error {
+					_, _ = stderr.Write([]byte(tt.stderr))
+
+					return tt.commandErr
+				})
+			}
+
+			m := &Manager{Runner: r}
+
+			err := m.SetPoolProperties(ctx, tt.args.name, tt.args.properties)
+
+			if tt.wantErr != "" {
+				assert.EqualError(t, err, tt.wantErr)
+				for _, target := range tt.wantErrTargets {
+					assert.ErrorIs(t, err, target)
+				}
+
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestManager_CreatePool(t *testing.T) {
 	ioWriter := reflect.TypeOf((*io.Writer)(nil)).Elem()
 
@@ -347,7 +527,6 @@ func TestManager_CreatePool(t *testing.T) {
 				Err,
 				ErrInvalidCreateOptions,
 				ErrZpool,
-				errInvalidCreatePoolOptions,
 			},
 		},
 		{
