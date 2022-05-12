@@ -250,19 +250,38 @@ func (p Properties) Uint64(property string) (uint64, bool) {
 	return 0, false
 }
 
-func propertyMapFlags(flag string, properties map[string]string) []string {
+func propertyMapFlags(
+	flag string,
+	properties map[string]string,
+) ([]string, error) {
 	props := []string{}
-	for key, prop := range properties {
-		props = append(props, fmt.Sprintf("%s=%s", key, prop))
+	for property, value := range properties {
+		switch property {
+		case "":
+			return nil, fmt.Errorf(
+				"%w: empty property name", ErrInvalidProperty,
+			)
+		case allProperty:
+			return nil, fmt.Errorf(
+				"%w: '%s' is not a valid property",
+				ErrInvalidProperty, allProperty,
+			)
+		}
+
+		props = append(props, fmt.Sprintf("%s=%s", property, value))
 	}
 	sort.Strings(props)
 
 	r := []string{}
 	for _, prop := range props {
-		r = append(r, flag, prop)
+		if flag != "" {
+			r = append(r, flag, prop)
+		} else {
+			r = append(r, prop)
+		}
 	}
 
-	return r
+	return r, nil
 }
 
 var zfsIECSizeRegexp = regexp.MustCompile(`^([0-9]+)\s*([a-zA-Z])$`)

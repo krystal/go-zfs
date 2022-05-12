@@ -67,15 +67,28 @@ func (m *Manager) SetPoolProperty(
 	property string,
 	value string,
 ) error {
+	return m.SetPoolProperties(ctx, name, map[string]string{property: value})
+}
+
+// SetPoolProperties sets given properties on pool with name.
+func (m *Manager) SetPoolProperties(
+	ctx context.Context,
+	name string,
+	properties map[string]string,
+) error {
 	if !m.validPoolName(name) {
 		return errInvalidPoolName
 	}
 
-	if property == "" || property == allProperty {
-		return errInvalidPoolProperty
+	args := []string{"set"}
+	propArgs, err := propertyMapFlags("", properties)
+	if err != nil {
+		return multierr.Append(ErrZpool, err)
 	}
+	args = append(args, propArgs...)
+	args = append(args, name)
 
-	_, err := m.zpool(ctx, "set", fmt.Sprintf("%s=%s", property, value), name)
+	_, err = m.zpool(ctx, args...)
 
 	return err
 }
@@ -145,18 +158,23 @@ func (m *Manager) CreatePool(
 		args = append(args, "-d")
 	}
 
-	args = append(
-		args, propertyMapFlags("-o", options.Properties)...,
-	)
-	args = append(
-		args, propertyMapFlags("-O", options.FilesystemProperties)...,
-	)
+	poolProps, err := propertyMapFlags("-o", options.Properties)
+	if err != nil {
+		return multierr.Append(ErrZpool, err)
+	}
+	args = append(args, poolProps...)
+
+	fsProps, err := propertyMapFlags("-O", options.FilesystemProperties)
+	if err != nil {
+		return multierr.Append(ErrZpool, err)
+	}
+	args = append(args, fsProps...)
 
 	args = append(args, options.Args...)
 	args = append(args, options.Name)
 	args = append(args, options.Vdevs...)
 
-	_, err := m.zpool(ctx, args...)
+	_, err = m.zpool(ctx, args...)
 
 	return err
 }
@@ -293,8 +311,12 @@ func (m *Manager) ImportPool(
 	if options.Force {
 		args = append(args, "-f")
 	}
-	args = append(
-		args, propertyMapFlags("-o", options.Properties)...,
+
+	poolProps, err := propertyMapFlags("-o", options.Properties)
+	if err != nil {
+		return multierr.Append(ErrZpool, err)
+	}
+	args = append(args, poolProps...,
 	)
 	if len(options.DirOrDevice) > 0 {
 		for _, v := range options.DirOrDevice {
@@ -306,7 +328,7 @@ func (m *Manager) ImportPool(
 		args = append(args, options.Name)
 	}
 
-	_, err := m.zpool(ctx, args...)
+	_, err = m.zpool(ctx, args...)
 
 	return err
 }

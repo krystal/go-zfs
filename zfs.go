@@ -67,15 +67,28 @@ func (m *Manager) SetDatasetProperty(
 	property string,
 	value string,
 ) error {
+	return m.SetDatasetProperties(ctx, name, map[string]string{property: value})
+}
+
+// SetDatasetProperties sets given properties on dataset with name.
+func (m *Manager) SetDatasetProperties(
+	ctx context.Context,
+	name string,
+	properties map[string]string,
+) error {
 	if !m.validDatasetName(name) {
 		return errInvalidDatasetName
 	}
 
-	if property == "" || property == allProperty {
-		return errInvalidDatasetProperty
+	args := []string{"set"}
+	propArgs, err := propertyMapFlags("", properties)
+	if err != nil {
+		return multierr.Append(ErrZFS, err)
 	}
+	args = append(args, propArgs...)
+	args = append(args, name)
 
-	_, err := m.zfs(ctx, "set", fmt.Sprintf("%s=%s", property, value), name)
+	_, err = m.zfs(ctx, args...)
 
 	return err
 }
@@ -175,16 +188,19 @@ func (m *Manager) CreateDataset(
 		}
 	}
 
-	args = append(
-		args, propertyMapFlags("-o", options.Properties)...,
-	)
+	propArgs, err := propertyMapFlags("-o", options.Properties)
+	if err != nil {
+		return multierr.Append(ErrZFS, err)
+	}
+
+	args = append(args, propArgs...)
 	if options.VolumeSize != "" {
 		args = append(args, "-V", options.VolumeSize)
 	}
 
 	args = append(args, options.Name)
 
-	_, err := m.zfs(ctx, args...)
+	_, err = m.zfs(ctx, args...)
 
 	return err
 }
