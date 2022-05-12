@@ -49,3 +49,7 @@ Name: tank/my-data
 Used: 150470656 bytes
 Quota: 1073741824 bytes
 ```
+
+## License
+
+[MIT](https://github.com/krystal/go-zfs/blob/main/LICENSE)
