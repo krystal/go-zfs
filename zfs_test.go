@@ -808,6 +808,42 @@ func TestManager_CreateDataset(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid 'all' property",
+			args: args{
+				options: &CreateDatasetOptions{
+					Name: "tank/my-dataset",
+					Properties: map[string]string{
+						"all":            "off",
+						(zfsprops.Atime): "off",
+					},
+				},
+			},
+			wantErr: "zfs; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "invalid empty property",
+			args: args{
+				options: &CreateDatasetOptions{
+					Name: "tank/my-dataset",
+					Properties: map[string]string{
+						"":               "off",
+						(zfsprops.Atime): "off",
+					},
+				},
+			},
+			wantErr: "zfs; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZFS,
+				ErrInvalidProperty,
+			},
+		},
+		{
 			name: "filesystem",
 			args: args{
 				options: &CreateDatasetOptions{

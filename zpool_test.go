@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	mock_runner "github.com/krystal/go-runner/mock"
+	"github.com/krystal/go-zfs/zfsprops"
 	"github.com/krystal/go-zfs/zpoolprops"
 	"github.com/romdo/gomockctx"
 	"github.com/stretchr/testify/assert"
@@ -584,6 +585,82 @@ func TestManager_CreatePool(t *testing.T) {
 				Err,
 				ErrZpool,
 				ErrInvalidCreateOptions,
+			},
+		},
+		{
+			name: "invalid 'all' pool property",
+			args: args{
+				options: &CreatePoolOptions{
+					Name: "my-test-pool",
+					Properties: map[string]string{
+						"all":               "off",
+						(zpoolprops.Ashift): "12",
+					},
+					Vdevs: []string{"/dev/test-a", "/dev/test-b"},
+				},
+			},
+			wantErr: "zpool; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "invalid empty pool property",
+			args: args{
+				options: &CreatePoolOptions{
+					Name: "my-test-pool",
+					Properties: map[string]string{
+						"":                  "off",
+						(zpoolprops.Ashift): "12",
+					},
+					Vdevs: []string{"/dev/test-a", "/dev/test-b"},
+				},
+			},
+			wantErr: "zpool; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "invalid 'all' filesystem property",
+			args: args{
+				options: &CreatePoolOptions{
+					Name: "my-test-pool",
+					FilesystemProperties: map[string]string{
+						"all":            "off",
+						(zfsprops.Atime): "off",
+					},
+					Vdevs: []string{"/dev/test-a", "/dev/test-b"},
+				},
+			},
+			wantErr: "zpool; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "invalid empty filesystem property",
+			args: args{
+				options: &CreatePoolOptions{
+					Name: "my-test-pool",
+					FilesystemProperties: map[string]string{
+						"":               "off",
+						(zfsprops.Atime): "off",
+					},
+					Vdevs: []string{"/dev/test-a", "/dev/test-b"},
+				},
+			},
+			wantErr: "zpool; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
 			},
 		},
 		{
@@ -1638,8 +1715,12 @@ func TestManager_ImportPool(t *testing.T) {
 					Name: "my-pool/things",
 				},
 			},
-			wantErr:        "zpool; invalid name",
-			wantErrTargets: []error{Err, ErrZpool, ErrInvalidName},
+			wantErr: "zpool; invalid name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidName,
+			},
 		},
 		{
 			name: "name",
@@ -1665,6 +1746,42 @@ func TestManager_ImportPool(t *testing.T) {
 				"import",
 				"-o", "ashift=12", "-o", "autotrim=off",
 				"my-test-pool",
+			},
+		},
+		{
+			name: "invalid 'all' pool property",
+			args: args{
+				options: &ImportPoolOptions{
+					Name: "my-test-pool",
+					Properties: map[string]string{
+						"all":               "off",
+						(zpoolprops.Ashift): "12",
+					},
+				},
+			},
+			wantErr: "zpool; invalid property: 'all' is not a valid property",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
+			},
+		},
+		{
+			name: "invalid empty pool property",
+			args: args{
+				options: &ImportPoolOptions{
+					Name: "my-test-pool",
+					Properties: map[string]string{
+						"":                  "off",
+						(zpoolprops.Ashift): "12",
+					},
+				},
+			},
+			wantErr: "zpool; invalid property: empty property name",
+			wantErrTargets: []error{
+				Err,
+				ErrZpool,
+				ErrInvalidProperty,
 			},
 		},
 		{
