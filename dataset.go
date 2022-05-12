@@ -249,6 +249,20 @@ func (p *Dataset) Compression() (string, bool) {
 	return p.String(zfsprops.Compression)
 }
 
+// Mountpoint returns the value of the "mountpoint" property.
+//
+// The second return value indicates if the property is present in the Dataset
+// instance. If the raw mountpoint value is "none", an empty string will be
+// returned instead of "none".
+func (p *Dataset) Mountpoint() (string, bool) {
+	v, ok := p.String(zfsprops.Mountpoint)
+	if v == "none" {
+		v = ""
+	}
+
+	return v, ok
+}
+
 // Sync returns the value of the "sync" property.
 //
 // The second return value indicates if the property is present in the Dataset

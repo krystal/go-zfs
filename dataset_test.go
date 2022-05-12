@@ -375,6 +375,114 @@ func TestDataset_Compression(t *testing.T) {
 	}
 }
 
+func TestDataset_Mountpoint(t *testing.T) {
+	type fields struct {
+		Properties Properties
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+		wantOk bool
+	}{
+		{
+			name: "not set",
+			fields: fields{
+				Properties: Properties{},
+			},
+			want:   "",
+			wantOk: false,
+		},
+		{
+			name: "empty",
+			fields: fields{
+				Properties: Properties{
+					"mountpoint": {
+						Name:     "tank/my-dataset",
+						Property: "mountpoint",
+						Value:    "",
+						Source:   "-",
+					},
+				},
+			},
+			want:   "",
+			wantOk: true,
+		},
+		{
+			name: "blank",
+			fields: fields{
+				Properties: Properties{
+					"mountpoint": {
+						Name:     "tank/my-dataset",
+						Property: "mountpoint",
+						Value:    "-",
+						Source:   "-",
+					},
+				},
+			},
+			want:   "",
+			wantOk: false,
+		},
+		{
+			name: "none",
+			fields: fields{
+				Properties: Properties{
+					"mountpoint": {
+						Name:     "tank/my-dataset",
+						Property: "mountpoint",
+						Value:    "none",
+						Source:   "local",
+					},
+				},
+			},
+			want:   "",
+			wantOk: true,
+		},
+		{
+			name: "/mnt/my-dataset",
+			fields: fields{
+				Properties: Properties{
+					"mountpoint": {
+						Name:     "tank/my-dataset",
+						Property: "mountpoint",
+						Value:    "/mnt/my-dataset",
+						Source:   "default",
+					},
+				},
+			},
+			want:   "/mnt/my-dataset",
+			wantOk: true,
+		},
+		{
+			name: "/tmp/LEWZUBUyBFFX02kQ/my-dataset",
+			fields: fields{
+				Properties: Properties{
+					"mountpoint": {
+						Name:     "tank/my-dataset",
+						Property: "mountpoint",
+						Value:    "/tmp/LEWZUBUyBFFX02kQ/my-dataset",
+						Source:   "local",
+					},
+				},
+			},
+			want:   "/tmp/LEWZUBUyBFFX02kQ/my-dataset",
+			wantOk: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Dataset{
+				Properties: tt.fields.Properties,
+			}
+
+			got, gotOk := d.Mountpoint()
+
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.wantOk, gotOk)
+		})
+	}
+}
+
 func TestDataset_Sync(t *testing.T) {
 	type fields struct {
 		Properties Properties
