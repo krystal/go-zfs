@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -156,6 +157,79 @@ func TestIntegration_datasetCreateGetDestroy(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestIntegration_datasetCreateGetDestroyMounted(t *testing.T) {
+	ctx := context.Background()
+	z := newZFSManager(t)
+	poolName, _ := createTestPool(t, z)
+	level0Name := zfs.Join(poolName, "level-0")
+	level0Mountpoint := t.TempDir()
+
+	err := z.CreateDataset(ctx, &zfs.CreateDatasetOptions{
+		Name: level0Name,
+		Properties: map[string]string{
+			zfsprops.CanMount:   "on",
+			zfsprops.Mountpoint: level0Mountpoint,
+		},
+		CreateParents: true,
+	})
+	require.NoError(t, err)
+
+	ds, err := z.GetDataset(ctx, level0Name)
+	require.NoError(t, err)
+
+	gotMountpoint, ok := ds.Mountpoint()
+	assert.True(t, ok)
+	assert.Equal(t, level0Mountpoint, gotMountpoint)
+
+	level1Name := zfs.Join(ds.Name, "level-1")
+	level1Mountpoint := filepath.Join(level0Mountpoint, "level-1")
+
+	level2Name := zfs.Join(level1Name, "level-2")
+	level2Mountpoint := filepath.Join(level1Mountpoint, "level-2")
+	assert.NoDirExists(t, level2Mountpoint)
+
+	err = z.CreateDataset(ctx, &zfs.CreateDatasetOptions{
+		Name:          level2Name,
+		CreateParents: true,
+	})
+	require.NoError(t, err)
+	assert.DirExists(t, level2Mountpoint)
+
+	level2, err := z.GetDataset(ctx, level2Name)
+	require.NoError(t, err)
+
+	gotMountpoint, ok = level2.Mountpoint()
+	assert.True(t, ok)
+	assert.Equal(t, level2Mountpoint, gotMountpoint)
+
+	level0File := filepath.Join(level0Mountpoint, "hello.txt")
+	err = os.WriteFile(level0File, []byte("hello dataset"), 0o600)
+	require.NoError(t, err)
+
+	level2File := filepath.Join(level2Mountpoint, "hello.txt")
+	err = os.WriteFile(level2File, []byte("hello child"), 0o600)
+	require.NoError(t, err)
+
+	err = z.DestroyDataset(
+		ctx, level1Name, zfs.DestroyRecursive, zfs.DestroyForceUnmount,
+	)
+	require.NoError(t, err)
+	assert.NoDirExists(t, level1Mountpoint)
+
+	assert.DirExists(t, level0Mountpoint)
+	assert.FileExists(t, level0File)
+	err = z.DestroyDataset(
+		ctx, level0Name, zfs.DestroyRecursive, zfs.DestroyForceUnmount,
+	)
+	require.NoError(t, err)
+
+	// File should be gone, as the ZFS dataset is destroyed.
+	assert.NoFileExists(t, level0File)
+
+	// The mountpoint directory should still exist however.
+	assert.DirExists(t, level0Mountpoint)
+}
+
 func TestIntegration_datasetGetList(t *testing.T) {
 	ctx := context.Background()
 	z := newZFSManager(t)
@@ -210,7 +284,7 @@ func TestIntegration_datasetGetList(t *testing.T) {
 	assert.Contains(t, names, dataset2.Name)
 }
 
-func TestIntegration_datasetSetAndGetProperties(t *testing.T) {
+func TestIntegration_datasetSetGetInheritProperties(t *testing.T) {
 	ctx := context.Background()
 	z := newZFSManager(t)
 	poolName, _ := createTestPool(t, z)
@@ -227,18 +301,57 @@ func TestIntegration_datasetSetAndGetProperties(t *testing.T) {
 
 	current, err := z.GetDatasetProperty(ctx, datasetName, zfsprops.Atime)
 	require.NoError(t, err)
+	assert.Equal(t, "off", current)
 
-	newVal := "on"
-	if newVal == current {
-		newVal = "off"
-	}
-	err = z.SetDatasetProperty(ctx, datasetName, zfsprops.Atime, newVal)
+	err = z.SetDatasetProperty(ctx, datasetName, zfsprops.Atime, "on")
 	require.NoError(t, err)
 
 	current, err = z.GetDatasetProperty(ctx, datasetName, zfsprops.Atime)
 	require.NoError(t, err)
+	assert.Equal(t, "on", current)
 
-	assert.Equal(t, newVal, current)
+	err = z.InheritDatasetProperty(ctx, datasetName, zfsprops.Atime, true)
+	require.NoError(t, err)
+
+	current, err = z.GetDatasetProperty(ctx, datasetName, zfsprops.Atime)
+	require.NoError(t, err)
+	assert.Equal(t, "off", current)
+}
+
+func TestIntegration_datasetUserProperties(t *testing.T) {
+	ctx := context.Background()
+	z := newZFSManager(t)
+	poolName, _ := createTestPool(t, z)
+	datasetName := zfs.Join(poolName, t.Name(), "test")
+
+	err := z.CreateDataset(ctx, &zfs.CreateDatasetOptions{
+		Name: datasetName,
+		Properties: map[string]string{
+			zfsprops.CanMount: "off",
+		},
+		CreateParents: true,
+	})
+	require.NoError(t, err)
+
+	propName := "com.github.krystal.go-zfs:test_prop"
+
+	current, err := z.GetDatasetProperty(ctx, datasetName, propName)
+	require.NoError(t, err)
+	assert.Equal(t, "-", current)
+
+	err = z.SetDatasetProperty(ctx, datasetName, propName, "echo 123")
+	require.NoError(t, err)
+
+	current, err = z.GetDatasetProperty(ctx, datasetName, propName)
+	require.NoError(t, err)
+	assert.Equal(t, "echo 123", current)
+
+	err = z.InheritDatasetProperty(ctx, datasetName, propName, true)
+	require.NoError(t, err)
+
+	current, err = z.GetDatasetProperty(ctx, datasetName, propName)
+	require.NoError(t, err)
+	assert.Equal(t, "-", current)
 }
 
 //
@@ -333,7 +446,8 @@ func createTestPool(
 	err := poolMgr.CreatePool(ctx, &zfs.CreatePoolOptions{
 		Name: poolName,
 		FilesystemProperties: map[string]string{
-			"canmount": "off",
+			zfsprops.Atime:    "off",
+			zfsprops.CanMount: "off",
 		},
 		Mountpoint: "none",
 		Vdevs:      vdevs,
