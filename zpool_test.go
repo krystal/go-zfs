@@ -110,6 +110,21 @@ func TestManager_GetPoolProperty(t *testing.T) {
 			want:   "enabled",
 		},
 		{
+			name: "no such pool",
+			args: args{
+				name:     "my-other-pool",
+				property: "size",
+			},
+			wantArgs: []string{
+				"get", "-Hp", "-o", "value", "size", "my-other-pool",
+			},
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; not found; exit status 1: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
+		},
+		{
 			name: "command error",
 			args: args{
 				name:     "my-test-pool",
@@ -250,13 +265,13 @@ func TestManager_SetPoolProperty(t *testing.T) {
 			},
 		},
 		{
-			name: "quota",
+			name: "delegation",
 			args: args{
 				name:     "my-test-pool",
-				property: "quota",
-				value:    "10G",
+				property: "delegation",
+				value:    "on",
 			},
-			wantArgs: []string{"set", "quota=10G", "my-test-pool"},
+			wantArgs: []string{"set", "delegation=on", "my-test-pool"},
 		},
 		{
 			name: "feature@async_destroy",
@@ -268,6 +283,22 @@ func TestManager_SetPoolProperty(t *testing.T) {
 			wantArgs: []string{
 				"set", "feature@async_destroy=disabled", "my-test-pool",
 			},
+		},
+		{
+			name: "no such pool",
+			args: args{
+				name:     "my-other-pool",
+				property: "delegation",
+				value:    "on",
+			},
+			wantArgs: []string{
+				"set", "delegation=on", "my-other-pool",
+			},
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; not found; exit status 1: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
 		},
 		{
 			name: "command error",
@@ -421,10 +452,10 @@ func TestManager_SetPoolProperties(t *testing.T) {
 			args: args{
 				name: "my-test-pool",
 				properties: map[string]string{
-					"quota": "10G",
+					"delegation": "on",
 				},
 			},
-			wantArgs: []string{"set", "quota=10G", "my-test-pool"},
+			wantArgs: []string{"set", "delegation=on", "my-test-pool"},
 		},
 		{
 			name: "multiple properties",
@@ -439,6 +470,23 @@ func TestManager_SetPoolProperties(t *testing.T) {
 				"set", "feature@async_destroy=disabled", "quota=10G",
 				"my-test-pool",
 			},
+		},
+		{
+			name: "no such pool",
+			args: args{
+				name: "my-other-pool",
+				properties: map[string]string{
+					"delegation": "on",
+				},
+			},
+			wantArgs: []string{
+				"set", "delegation=on", "my-other-pool",
+			},
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; not found; exit status 1: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
 		},
 		{
 			name: "command error",
@@ -1129,7 +1177,7 @@ my-test-pool	health	ONLINE	-
 			},
 		},
 		{
-			name: "command error",
+			name: "no such pool",
 			args: args{
 				name: "my-other-pool",
 			},
@@ -1137,17 +1185,32 @@ my-test-pool	health	ONLINE	-
 				"get", "-Hp", "-o", "name,property,value,source",
 				"all", "my-other-pool",
 			},
-			stderr: `cannot open 'my-other-pool': no such pool
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; not found; exit status 1: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
+		},
+		{
+			name: "command error",
+			args: args{
+				name: "my-test-pool",
+			},
+			wantArgs: []string{
+				"get", "-Hp", "-o", "name,property,value,source",
+				"all", "my-test-pool",
+			},
+			stderr: `bad property list: invalid property 'nothing'
 usage:
 	get [-Hp] [-o "all" | field[,...]] <"all" | property[,...]> <pool> ...
 `,
 			commandErr: errors.New("exit status 1"),
-			wantErr: "zpool; exit status 1: cannot open " +
-				"'my-other-pool': no such pool",
+			wantErr: "zpool; exit status 1: bad property list: " +
+				"invalid property 'nothing'",
 			wantErrTargets: []error{Err, ErrZpool},
 		},
 		{
-			name: "output wrong pool name",
+			name: "output has wrong pool name",
 			args: args{
 				name: "my-test-pool",
 			},
@@ -1613,18 +1676,32 @@ func TestManager_DestroyPool(t *testing.T) {
 			wantArgs: []string{"destroy", "-f", "my-test-pool"},
 		},
 		{
-			name: "command error",
+			name: "no such pool",
 			args: args{
 				name: "my-other-pool",
 			},
-			wantArgs: []string{"destroy", "my-other-pool"},
-			stderr: `cannot open 'my-other-pool': no such pool
+			wantArgs: []string{
+				"destroy", "my-other-pool",
+			},
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zpool; not found; exit status 1: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
+		},
+		{
+			name: "command error",
+			args: args{
+				name: "foo#bar",
+			},
+			wantArgs: []string{"destroy", "foo#bar"},
+			stderr: `cannot open 'foo#bar': invalid character '#' in pool name
 usage:
 	destroy [-f] <pool>
 `,
 			commandErr: errors.New("exit status 1"),
-			wantErr: "zpool; exit status 1: cannot open " +
-				"'my-other-pool': no such pool",
+			wantErr: "zpool; exit status 1: cannot open 'foo#bar': " +
+				"invalid character '#' in pool name",
 			wantErrTargets: []error{Err, ErrZpool},
 		},
 	}
@@ -1857,7 +1934,7 @@ func TestManager_ImportPool(t *testing.T) {
 			},
 		},
 		{
-			name: "command error",
+			name: "no such pool",
 			args: args{
 				options: &ImportPoolOptions{Name: "nopefoo"},
 			},
@@ -1868,8 +1945,29 @@ usage:
 	import [-o mntopts] [-o property=value] ...
 `,
 			commandErr: errors.New("exit status 42"),
-			wantErr: "zpool; exit status 42: " +
+			wantErr: "zpool; not found; exit status 42: " +
 				"cannot import 'nopefoo': no such pool available",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
+		},
+		{
+			name: "command error",
+			args: args{
+				options: &ImportPoolOptions{
+					Name: "nopefoo",
+					Properties: map[string]string{
+						"nope": "what",
+					},
+				},
+			},
+			wantArgs: []string{"import", "-o", "nope=what", "nopefoo"},
+			stderr: `property 'nope' is not a valid pool property
+usage:
+	import [-d dir] [-D]
+	import [-o mntopts] [-o property=value] ...
+`,
+			commandErr: errors.New("exit status 42"),
+			wantErr: "zpool; exit status 42: " +
+				"property 'nope' is not a valid pool property",
 			wantErrTargets: []error{Err, ErrZpool},
 		},
 	}
@@ -1967,18 +2065,29 @@ func TestManager_ExportPool(t *testing.T) {
 			wantArgs: []string{"export", "-f", "my-test-pool"},
 		},
 		{
+			name: "no such pool",
+			args: args{
+				name: "my-other-pool",
+			},
+			wantArgs:   []string{"export", "my-other-pool"},
+			stderr:     "cannot open 'my-other-pool': no such pool\n",
+			commandErr: errors.New("exit status 2"),
+			wantErr: "zpool; not found; exit status 2: cannot open " +
+				"'my-other-pool': no such pool",
+			wantErrTargets: []error{Err, ErrZpool, ErrNotFound},
+		},
+		{
 			name: "command error",
 			args: args{
 				name: "my-other-pool",
 			},
 			wantArgs: []string{"export", "my-other-pool"},
-			stderr: `cannot open 'my-other-pool': no such pool
+			stderr: `stuff is broken oops
 usage:
 	export [-af] <pool> ...
 `,
-			commandErr: errors.New("exit status 2"),
-			wantErr: "zpool; exit status 2: cannot open " +
-				"'my-other-pool': no such pool",
+			commandErr:     errors.New("exit status 2"),
+			wantErr:        "zpool; exit status 2: stuff is broken oops",
 			wantErrTargets: []error{Err, ErrZpool},
 		},
 	}

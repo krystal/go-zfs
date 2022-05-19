@@ -29,9 +29,15 @@ func (m *Manager) zpool(
 	var stderr bytes.Buffer
 	err := m.Runner.RunContext(ctx, nil, &stdout, &stderr, "zpool", args...)
 	if err != nil {
+		cleanStderr := cleanUpStderr(stderr.Bytes())
+
+		errs := ErrZpool
+		if notFoundErr(cleanStderr) {
+			errs = multierr.Append(errs, ErrNotFound)
+		}
+
 		return nil, multierr.Append(
-			ErrZpool,
-			fmt.Errorf("%w: %s", err, cleanUpStderr(stderr.Bytes())),
+			errs, fmt.Errorf("%w: %s", err, cleanStderr),
 		)
 	}
 
