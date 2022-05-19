@@ -86,6 +86,18 @@ func TestManager_GetDatasetProperty(t *testing.T) {
 			},
 		},
 		{
+			name: "blank value",
+			args: args{
+				name:     "tank/my-dataset",
+				property: "size",
+			},
+			wantArgs: []string{
+				"get", "-Hp", "-o", "value", "size", "tank/my-dataset",
+			},
+			stdout: "-",
+			want:   "-",
+		},
+		{
 			name: "empty value",
 			args: args{
 				name:     "tank/my-dataset",
@@ -120,6 +132,22 @@ func TestManager_GetDatasetProperty(t *testing.T) {
 			},
 			stdout: "enabled\n",
 			want:   "enabled",
+		},
+		{
+			name: "dataset does not exist",
+			args: args{
+				name:     "tank/my-other-dataset",
+				property: "size",
+			},
+			wantArgs: []string{
+				"get", "-Hp", "-o", "value", "size", "tank/my-other-dataset",
+			},
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
 		},
 		{
 			name: "command error",
@@ -295,6 +323,23 @@ func TestManager_SetDatasetProperty(t *testing.T) {
 			wantArgs: []string{
 				"set", "feature@async_destroy=disabled", "tank/my-dataset",
 			},
+		},
+		{
+			name: "dataset does not exist",
+			args: args{
+				name:     "tank/my-other-dataset",
+				property: "quota",
+				value:    "10G",
+			},
+			wantArgs: []string{
+				"set", "quota=10G", "tank/my-other-dataset",
+			},
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
 		},
 		{
 			name: "command error",
@@ -486,6 +531,24 @@ func TestManager_SetDatasetProperties(t *testing.T) {
 			},
 		},
 		{
+			name: "dataset does not exist",
+			args: args{
+				name: "tank/my-other-dataset",
+				properties: map[string]string{
+					"quota": "10G",
+				},
+			},
+			wantArgs: []string{
+				"set", "quota=10G", "tank/my-other-dataset",
+			},
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
+		},
+		{
 			name: "command error",
 			args: args{
 				name: "tank/my-dataset",
@@ -654,6 +717,23 @@ func TestManager_InheritDatasetProperty(t *testing.T) {
 			wantArgs: []string{
 				"inherit", "feature@async_destroy", "tank/my-dataset",
 			},
+		},
+		{
+			name: "dataset does not exist",
+			args: args{
+				name:      "tank/my-other-dataset",
+				property:  "quota",
+				recursive: false,
+			},
+			wantArgs: []string{
+				"inherit", "quota", "tank/my-other-dataset",
+			},
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
 		},
 		{
 			name: "command error",
@@ -1022,21 +1102,56 @@ func TestManager_CreateDataset(t *testing.T) {
 			},
 		},
 		{
-			name: "command error",
+			name: "deeply nested without create parents",
+			args: args{
+				options: &CreateDatasetOptions{
+					Name: "tank/my-dataset/foo/bar",
+				},
+			},
+			wantArgs: []string{"create", "tank/my-dataset/foo/bar"},
+			stderr: "cannot create 'tank/my-dataset/foo/bar': " +
+				"parent does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot create " +
+				"'tank/my-dataset/foo/bar': parent does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
+		},
+		{
+			name: "no such pool",
 			args: args{
 				options: &CreateDatasetOptions{
 					Name: "tankz/my-dataset",
 				},
 			},
 			wantArgs: []string{"create", "tankz/my-dataset"},
-			stderr: `cannot create 'tankz/my-dataset': no such pool 'tankz'
+			stderr: "cannot create 'tankz/my-dataset': " +
+				"no such pool 'tankz'\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: " +
+				"cannot create 'tankz/my-dataset': no such pool 'tankz'",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
+		},
+		{
+			name: "command error",
+			args: args{
+				options: &CreateDatasetOptions{
+					Name: "tank/my-dataset",
+					Properties: map[string]string{
+						zfsprops.Quota: "what",
+					},
+				},
+			},
+			wantArgs: []string{
+				"create", "-o", "quota=what", "tank/my-dataset",
+			},
+			stderr: `cannot create 'tank/my-dataset': bad numeric value 'what'
 usage:
 	create [-Pnpuv] [-o property=value] ... <filesystem>
 	create [-Pnpsv] [-b blocksize] [-o property=value] ... -V <size> <volume>
 `,
 			commandErr: errors.New("exit status 1"),
-			wantErr: "zfs; exit status 1: cannot create 'tankz/my-dataset': " +
-				"no such pool 'tankz'",
+			wantErr: "zfs; exit status 1: cannot create 'tank/my-dataset': " +
+				"bad numeric value 'what'",
 			wantErrTargets: []error{Err, ErrZFS},
 		},
 	}
@@ -1251,7 +1366,7 @@ tank/my-dataset	used	20717056	-
 			},
 		},
 		{
-			name: "command error",
+			name: "dataset does not exist",
 			args: args{
 				name: "tank/my-other-dataset",
 			},
@@ -1259,17 +1374,34 @@ tank/my-dataset	used	20717056	-
 				"get", "-Hp", "-o", "name,property,value,source",
 				"all", "tank/my-other-dataset",
 			},
-			stderr: `cannot open 'tank/my-other-dataset': dataset does not exist
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
+		},
+		{
+			name: "command error",
+			args: args{
+				name:       "tank/my-other-dataset",
+				properties: []string{"nothing"},
+			},
+			wantArgs: []string{
+				"get", "-Hp", "-o", "name,property,value,source",
+				"nothing", "tank/my-other-dataset",
+			},
+			stderr: `bad property list: invalid property 'nothing'
 usage:
 	get [-rHp] [-d max] [-o "all" | field[,...]]
 `,
 			commandErr: errors.New("exit status 1"),
-			wantErr: "zfs; exit status 1: cannot open " +
-				"'tank/my-other-dataset': dataset does not exist",
+			wantErr: "zfs; exit status 1: " +
+				"bad property list: invalid property 'nothing'",
 			wantErrTargets: []error{Err, ErrZFS},
 		},
 		{
-			name: "output wrong dataset name",
+			name: "output has wrong dataset name",
 			args: args{
 				name: "tank/my-dataset",
 			},
@@ -2379,18 +2511,32 @@ func TestManager_DestroyDataset(t *testing.T) {
 			},
 		},
 		{
+			name: "dataset does not exist",
+			args: args{
+				name: "tank/my-other-dataset",
+			},
+			wantArgs: []string{
+				"destroy", "tank/my-other-dataset",
+			},
+			stderr: "cannot open 'tank/my-other-dataset': " +
+				"dataset does not exist\n",
+			commandErr: errors.New("exit status 1"),
+			wantErr: "zfs; not found; exit status 1: cannot open " +
+				"'tank/my-other-dataset': dataset does not exist",
+			wantErrTargets: []error{Err, ErrZFS, ErrNotFound},
+		},
+		{
 			name: "command error",
 			args: args{
 				name: "tank/my-other-dataset",
 			},
 			wantArgs: []string{"destroy", "tank/my-other-dataset"},
-			stderr: `cannot open 'tank/my-other-dataset': dataset does not exist
+			stderr: `destroy is broken right now
 usage:
-	get [-rHp] [-d max] [-o "all" | field[,...]]
+	destroy [-fnpRrv] <filesystem|volume>
 `,
-			commandErr: errors.New("exit status 1"),
-			wantErr: "zfs; exit status 1: cannot open " +
-				"'tank/my-other-dataset': dataset does not exist",
+			commandErr:     errors.New("exit status 1"),
+			wantErr:        "zfs; exit status 1: destroy is broken right now",
 			wantErrTargets: []error{Err, ErrZFS},
 		},
 	}

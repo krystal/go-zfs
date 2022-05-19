@@ -17,6 +17,10 @@ var (
 	)
 )
 
+func validPoolName(name string) bool {
+	return len(name) > 0 && !strings.Contains(name, "/")
+}
+
 func (m *Manager) zpool(
 	ctx context.Context,
 	args ...string,
@@ -25,17 +29,19 @@ func (m *Manager) zpool(
 	var stderr bytes.Buffer
 	err := m.Runner.RunContext(ctx, nil, &stdout, &stderr, "zpool", args...)
 	if err != nil {
+		cleanStderr := cleanUpStderr(stderr.Bytes())
+
+		errs := ErrZpool
+		if notFoundErr(cleanStderr) {
+			errs = multierr.Append(errs, ErrNotFound)
+		}
+
 		return nil, multierr.Append(
-			ErrZpool,
-			fmt.Errorf("%w: %s", err, cleanUpStderr(stderr.Bytes())),
+			errs, fmt.Errorf("%w: %s", err, cleanStderr),
 		)
 	}
 
 	return parseTabular(stdout.Bytes()), nil
-}
-
-func (m *Manager) validPoolName(name string) bool {
-	return len(name) > 0 && !strings.Contains(name, "/")
 }
 
 // GetProperty returns the value of property on zpool with name.
@@ -44,7 +50,7 @@ func (m *Manager) GetPoolProperty(
 	name string,
 	property string,
 ) (string, error) {
-	if !m.validPoolName(name) {
+	if !validPoolName(name) {
 		return "", errInvalidPoolName
 	}
 
@@ -76,7 +82,7 @@ func (m *Manager) SetPoolProperties(
 	name string,
 	properties map[string]string,
 ) error {
-	if !m.validPoolName(name) {
+	if !validPoolName(name) {
 		return errInvalidPoolName
 	}
 
@@ -133,7 +139,7 @@ func (m *Manager) CreatePool(
 	if options == nil {
 		return errInvalidCreatePoolOptions
 	}
-	if !m.validPoolName(options.Name) {
+	if !validPoolName(options.Name) {
 		return multierr.Combine(
 			ErrZpool,
 			ErrInvalidCreateOptions,
@@ -188,7 +194,7 @@ func (m *Manager) GetPool(
 	name string,
 	properties ...string,
 ) (*Pool, error) {
-	if !m.validPoolName(name) {
+	if !validPoolName(name) {
 		return nil, errInvalidPoolName
 	}
 	if len(properties) == 0 {
@@ -261,7 +267,7 @@ func (m *Manager) DestroyPool(
 	name string,
 	force bool,
 ) error {
-	if !m.validPoolName(name) {
+	if !validPoolName(name) {
 		return errInvalidPoolName
 	}
 
@@ -303,7 +309,7 @@ func (m *Manager) ImportPool(
 	if options == nil {
 		options = &ImportPoolOptions{}
 	}
-	if options.Name != "" && !m.validPoolName(options.Name) {
+	if options.Name != "" && !validPoolName(options.Name) {
 		return errInvalidPoolName
 	}
 
@@ -340,7 +346,7 @@ func (m *Manager) ExportPool(
 	name string,
 	force bool,
 ) error {
-	if !m.validPoolName(name) {
+	if !validPoolName(name) {
 		return errInvalidPoolName
 	}
 

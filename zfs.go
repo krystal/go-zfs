@@ -19,22 +19,40 @@ var (
 	errInvalidDatasetProperty = multierr.Append(ErrZFS, ErrInvalidProperty)
 )
 
+func validDatasetName(name string) bool {
+	return len(name) > 0 && name[0] != '/' && name[len(name)-1] != '/'
+}
+
+var (
+	datasetDoesNotExistText = []byte("dataset does not exist")
+	parentDoesNotExistText  = []byte("parent does not exist")
+	noSuchPoolText          = []byte("no such pool")
+)
+
+func notFoundErr(stderr []byte) bool {
+	return bytes.Contains(stderr, datasetDoesNotExistText) ||
+		bytes.Contains(stderr, parentDoesNotExistText) ||
+		bytes.Contains(stderr, noSuchPoolText)
+}
+
 func (m *Manager) zfs(ctx context.Context, args ...string) ([][]string, error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	err := m.Runner.RunContext(ctx, nil, &stdout, &stderr, "zfs", args...)
 	if err != nil {
+		cleanStderr := cleanUpStderr(stderr.Bytes())
+
+		errs := ErrZFS
+		if notFoundErr(cleanStderr) {
+			errs = multierr.Append(errs, ErrNotFound)
+		}
+
 		return nil, multierr.Append(
-			ErrZFS,
-			fmt.Errorf("%w: %s", err, cleanUpStderr(stderr.Bytes())),
+			errs, fmt.Errorf("%w: %s", err, cleanStderr),
 		)
 	}
 
 	return parseTabular(stdout.Bytes()), nil
-}
-
-func (m *Manager) validDatasetName(name string) bool {
-	return len(name) > 0 && name[0] != '/' && name[len(name)-1] != '/'
 }
 
 // GetDatasetProperty returns the value of the given property for the given
@@ -44,7 +62,7 @@ func (m *Manager) GetDatasetProperty(
 	name string,
 	property string,
 ) (string, error) {
-	if !m.validDatasetName(name) {
+	if !validDatasetName(name) {
 		return "", errInvalidDatasetName
 	}
 
@@ -76,7 +94,7 @@ func (m *Manager) SetDatasetProperties(
 	name string,
 	properties map[string]string,
 ) error {
-	if !m.validDatasetName(name) {
+	if !validDatasetName(name) {
 		return errInvalidDatasetName
 	}
 
@@ -100,7 +118,7 @@ func (m *Manager) InheritDatasetProperty(
 	property string,
 	recursive bool,
 ) error {
-	if !m.validDatasetName(name) {
+	if !validDatasetName(name) {
 		return errInvalidDatasetName
 	}
 
@@ -163,7 +181,7 @@ func (m *Manager) CreateDataset(
 	if options == nil {
 		return multierr.Append(ErrZFS, ErrInvalidCreateOptions)
 	}
-	if !m.validDatasetName(options.Name) {
+	if !validDatasetName(options.Name) {
 		return multierr.Combine(
 			ErrZFS,
 			ErrInvalidCreateOptions,
@@ -214,7 +232,7 @@ func (m *Manager) GetDataset(
 	name string,
 	properties ...string,
 ) (*Dataset, error) {
-	if !m.validDatasetName(name) {
+	if !validDatasetName(name) {
 		return nil, errInvalidDatasetName
 	}
 	if len(properties) == 0 {
@@ -373,7 +391,7 @@ func (m *Manager) DestroyDataset(
 	name string,
 	flags ...DestroyDatasetFlag,
 ) error {
-	if !m.validDatasetName(name) {
+	if !validDatasetName(name) {
 		return errInvalidDatasetName
 	}
 

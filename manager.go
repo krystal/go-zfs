@@ -14,6 +14,7 @@ var (
 	Err                     = errors.New("")
 	ErrZFS                  = fmt.Errorf("%wzfs", Err)
 	ErrZpool                = fmt.Errorf("%wzpool", Err)
+	ErrNotFound             = fmt.Errorf("%wnot found", Err)
 	ErrInvalidName          = fmt.Errorf("%winvalid name", Err)
 	ErrInvalidProperty      = fmt.Errorf("%winvalid property", Err)
 	ErrInvalidCreateOptions = fmt.Errorf("%winvalid create options", Err)
