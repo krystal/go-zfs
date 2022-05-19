@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.1](https://github.com/krystal/go-zfs/compare/v0.1.0...v0.1.1) (2022-05-19)
+
+
+### Features
+
+* **error:** add ErrNotFound for when dataset/pool does not exist ([0e5a3da](https://github.com/krystal/go-zfs/commit/0e5a3dadf011ba95b8096bed0421b7ba3f0e7fce))
+
 ## 0.1.0 (2022-05-12)
 
 
