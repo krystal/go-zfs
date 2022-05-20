@@ -84,7 +84,11 @@ Get details for a specific dataset:
 
 ```go
 ds, err := z.GetDataset(ctx, "tank/my-data")
-fmt.Printf("Name: %s\n", ds.Name) // => Name: tank/my-data
+fmt.Printf("Name: %s\n", ds.Name)
+```
+
+```
+Name: tank/my-data
 ```
 
 Get `used` dataset property via `Used()` helper method, which returns the value
@@ -92,8 +96,12 @@ as a uint64 of bytes:
 
 ```go
 if v, ok := ds.Used(); ok {
-	fmt.Printf("Used: %d bytes\n", v) // => Used: 150470656 bytes
+	fmt.Printf("Used: %d bytes\n", v)
 }
+```
+
+```
+Used: 150470656 bytes
 ```
 
 Get `used` dataset property by directly accessing the `Properties` map,
@@ -101,8 +109,12 @@ returning a `Property` type which has a string `Value`.
 
 ```go
 if prop, ok := ds.Properties[zfsprops.Used]; ok {
-	fmt.Printf("Used: %s bytes\n", prop.Value) // => Used: 150470656 bytes
+	fmt.Printf("Used: %s bytes\n", prop.Value)
 }
+```
+
+```
+Used: 150470656 bytes
 ```
 
 Create a new pool, using both `zpoolprops` and `zfsprops` helper packages:
@@ -137,7 +149,11 @@ err = z.CreateDataset(ctx, &zfs.CreateDatasetOptions{
 })
 
 ds, err = z.GetDataset(ctx, "scratch/http/cache")
-fmt.Printf("Name: %s\n", ds.Name) // => Name: scratch/http/cache
+fmt.Printf("Name: %s\n", ds.Name)
+```
+
+```
+Name: scratch/http/cache
 ```
 
 Set dataset quota to 100 GiB and turn on atime:
