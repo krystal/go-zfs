@@ -443,6 +443,18 @@ func TestPool_Bytes(t *testing.T) {
 			wantOk: false,
 		},
 		{
+			name:   "none",
+			value:  "none",
+			want:   0,
+			wantOk: false,
+		},
+		{
+			name:   "0",
+			value:  "0",
+			want:   0,
+			wantOk: true,
+		},
+		{
 			name:   "239",
 			value:  "239",
 			want:   239, // 239 bytes
