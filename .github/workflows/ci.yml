@@ -65,7 +65,6 @@ jobs:
       matrix:
         os:
           - ubuntu-latest
-          - macos-latest
         go_version:
           - "1.16"
           - "1.17"
